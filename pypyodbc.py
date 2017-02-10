@@ -607,7 +607,11 @@ def dt_cvt(x):
     if py_v3:
         x = x.decode('ascii')
     if x == '': return None
-    else: return datetime.date(int(x[0:4]),int(x[5:7]),int(x[8:10]))
+    else:
+        try:
+            return datetime.date(int(x[0:4]),int(x[5:7]),int(x[8:10]))
+        except Exception:
+            return None
 
 def Decimal_cvt(x):
     if py_v3:

@@ -1787,8 +1787,7 @@ class Cursor:
             if ret != SQL_SUCCESS:
                 check_success(self, ret)
 
-            # Israelha patch: pypy2.7 cuts the col names with SQLDescribeColW
-            if force_unicode and sys.version_info >= (3, 0):
+            if force_unicode:
 
                 ret = ODBC_API.SQLDescribeColW(self.stmt_h, col, Cname, len(Cname), ADDR(Cname_ptr), \
                                                ADDR(Ctype_code),ADDR(Csize),ADDR(CDecimalDigits), ADDR(Cnull_ok))
@@ -1801,7 +1800,7 @@ class Cursor:
                 if ret != SQL_SUCCESS:
                     check_success(self, ret)
 
-            col_name = Cname.value.decode('utf-8')
+            col_name = from_buffer_u(Cname)
             if lowercase:
                 col_name = col_name.lower()
             #(name, type_code, display_size,

@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 
-# PyPyODBC is develped from RealPyODBC 0.1 beta released in 2004 by Michele Petrazzo. Thanks Michele.
+# PyPyODBC is developed from RealPyODBC 0.1 beta released in 2004 by Michele Petrazzo. Thanks Michele.
+# Website - https://github.com/jiangwen365/pypyodbc
 
 # The MIT License (MIT)
 #
-# Copyright (c) 2014 Henry Zhou <jiangwen365@gmail.com> and PyPyODBC contributors
+# Copyright (c) 2017 Henry Zhou <jiangwen365@gmail.com> and PyPyODBC contributors
 # Copyright (c) 2004 Michele Petrazzo
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
@@ -25,7 +26,7 @@ pooling = True
 apilevel = '2.0'
 paramstyle = 'qmark'
 threadsafety = 1
-version = '1.3.1'
+version = '1.3.6'
 lowercase=True
 
 DEBUG = 0
@@ -34,6 +35,10 @@ DEBUG = 0
 
 import sys, os, datetime, ctypes, threading
 from decimal import Decimal
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 py_ver = sys.version[:3]
@@ -89,12 +94,11 @@ SQL_ATTR_AUTOCOMMIT = SQL_AUTOCOMMIT = 102
 SQL_MODE_DEFAULT = SQL_MODE_READ_WRITE = 0; SQL_MODE_READ_ONLY = 1
 SQL_AUTOCOMMIT_OFF, SQL_AUTOCOMMIT_ON = 0, 1
 SQL_IS_UINTEGER = -5
-SQL_ATTR_LOGIN_TIMEOUT = 103; SQL_ATTR_CONNECTION_TIMEOUT = 113
+SQL_ATTR_LOGIN_TIMEOUT = 103; SQL_ATTR_CONNECTION_TIMEOUT = 113;SQL_ATTR_QUERY_TIMEOUT = 0
 SQL_COMMIT, SQL_ROLLBACK = 0, 1
 
 SQL_INDEX_UNIQUE,SQL_INDEX_ALL = 0,1
 SQL_QUICK,SQL_ENSURE = 0,1
-SQL_FETCH_NEXT = 1
 SQL_COLUMN_DISPLAY_SIZE = 6
 SQL_INVALID_HANDLE = -2
 SQL_NO_DATA_FOUND = 100; SQL_NULL_DATA = -1; SQL_NTS = -3
@@ -494,6 +498,7 @@ def UTF16_dec(buffer):
         if is_null_byte_pair:
             found_null = True
             break
+    
     if found_null:
         # We now decode all the characters in the actual data,
         # without the garbage
@@ -502,20 +507,20 @@ def UTF16_dec(buffer):
         to_decode = buffer.raw
 
     try:
-        ret = to_decode.decode(odbc_decoding)
-    except UnicodeDecodeError:
-        # We print as there is no logging here
-        print 'pypyodbc failed to decode "%s". Emitting in ' \
-              'raw form' % to_decode
-        ret = to_decode
+        val = to_decode.decode(odbc_decoding)
 
-    return ret
+    except UnicodeDecodeError:
+        logger.warning('Failed to decode "%s". Emitting in raw form',
+                       to_decode)
+        val = to_decode
+
+    return val
 
 from_buffer_u = lambda buffer: buffer.value
 
 # This is the common case on Linux, which uses wide Python build together with
 # the default unixODBC without the "-DSQL_WCHART_CONVERT" CFLAGS.
-if sys.platform not in ('win32','cli'):
+if sys.platform not in ('win32','cli','cygwin'):
     if UNICODE_SIZE >= SQLWCHAR_SIZE:
         # We can only use unicode buffer if the size of wchar_t (UNICODE_SIZE) is
         # the same as the size expected by the driver manager (SQLWCHAR_SIZE).
@@ -592,19 +597,28 @@ SQL_C_DEFAULT = 99
 
 SQL_DESC_DISPLAY_SIZE = SQL_COLUMN_DISPLAY_SIZE
 
+
 def dttm_cvt(x):
     if py_v3:
         x = x.decode('ascii')
+
     try:
-        if x == '': return None
-        else: return datetime.datetime(int(x[0:4]),int(x[5:7]),int(x[8:10]),int(x[10:13]),int(x[14:16]),int(x[17:19]),int(x[20:].ljust(6,'0')))
-    except Exception as ex:
+        if x == '': 
+            return None
+        
+        return datetime.datetime(
+            int(x[0:4]), int(x[5:7]), int(x[8:10]), int(x[10:13]),
+            int(x[14:16]), int(x[17:19]), int(x[20:].ljust(6, '0')))
+    
+    except Exception as ex:  # Try to convert the value using a smart parser
         import dateutil.parser
         try:
             return dateutil.parser.parse(x)
+        
         except Exception:
             # if failed to parse with dateutil raise the original exception
             raise ex
+
 
 def tm_cvt(x):
     if py_v3:
@@ -612,11 +626,13 @@ def tm_cvt(x):
     if x == '': return None
     else: return datetime.time(int(x[0:2]),int(x[3:5]),int(x[6:8]),int(x[9:].ljust(6,'0')))
 
+
 def dt_cvt(x):
     if py_v3:
         x = x.decode('ascii')
     if x == '': return None
     else: return datetime.date(int(x[0:4]),int(x[5:7]),int(x[8:10]))
+
 
 def Decimal_cvt(x):
     if py_v3:
@@ -633,7 +649,7 @@ if sys.platform == 'cli':
 # Below Datatype mappings referenced the document at
 # http://infocenter.sybase.com/help/index.jsp?topic=/com.sybase.help.sdk_12.5.1.aseodbc/html/aseodbc/CACFDIGH.htm
 
-SQL_data_type_dict = { \
+SQL_data_type_dict = {
     #SQL Data TYPE        0.Python Data Type     1.Default Output Converter  2.Buffer Type     3.Buffer Allocator   4.Default Size  5.Variable Length
     SQL_TYPE_NULL       : (None,                lambda x: None,             SQL_C_CHAR,         create_buffer,      2     ,         False         ),
     SQL_CHAR            : (str,                 lambda x: x,                SQL_C_CHAR,         create_buffer,      2048  ,         False         ),
@@ -973,7 +989,7 @@ def ctrl_err(ht, h, val_ret, ansi):
         else:
             raw_s = str_8b
     else:
-        state = create_buffer_u(22)
+        state = create_buffer_u(24)
         Message = create_buffer_u(1024*4)
         ODBC_func = ODBC_API.SQLGetDiagRecW
         raw_s = unicode
@@ -1004,7 +1020,7 @@ def ctrl_err(ht, h, val_ret, ansi):
                 raise Error(state,err_text)
             else:
                 raise DatabaseError(state,err_text)
-            break
+
         elif ret == SQL_INVALID_HANDLE:
             #The handle passed is an invalid handle
             raise ProgrammingError('', 'SQL_INVALID_HANDLE')
@@ -1213,10 +1229,19 @@ class Cursor:
         self.arraysize = 1
         ret = ODBC_API.SQLAllocHandle(SQL_HANDLE_STMT, self.connection.dbc_h, ADDR(self.stmt_h))
         check_success(self, ret)
+  
+        self.timeout = conx.timeout
+        if self.timeout != 0:
+            self.set_timeout(self.timeout)
         self._PARAM_SQL_TYPE_LIST = []
         self.closed = False
 
 
+    def set_timeout(self, timeout):
+        self.timeout = timeout
+        ret = ODBC_API.SQLSetStmtAttr(self.stmt_h, SQL_ATTR_QUERY_TIMEOUT, self.timeout, 0)
+        check_success(self, ret)
+        
     def prepare(self, query_string):
         """prepare a query"""
 
@@ -1224,7 +1249,7 @@ class Cursor:
         if not self.connection:
             self.close()
 
-        if type(query_string) == unicode:
+        if isinstance(query_string, unicode):
             c_query_string = wchar_pointer(UCS_buf(query_string))
             ret = ODBC_API.SQLPrepareW(self.stmt_h, c_query_string, len(query_string))
         else:
@@ -1295,7 +1320,6 @@ class Cursor:
                          %(NumParams.value,len(param_types))
             raise ProgrammingError('HY000',error_desc)
 
-
         # Every parameter needs to be binded to a buffer
         ParamBufferList = []
         # Temporary holder since we can only call SQLDescribeParam before
@@ -1316,7 +1340,6 @@ class Cursor:
                 sql_type = SQL_VARCHAR
                 buf_size = 255
                 ParameterBuffer = create_buffer(buf_size)
-
 
             elif param_types[col_num][0] == 'U':
                 sql_c_type = SQL_C_WCHAR
@@ -1349,15 +1372,21 @@ class Cursor:
                 buf_size = SQL_data_type_dict[sql_type][4]
                 ParameterBuffer = create_buffer(buf_size)
 
-
             elif param_types[col_num][0] == 'D': #Decimal
                 sql_c_type = SQL_C_CHAR
                 sql_type = SQL_NUMERIC
                 digit_num, dec_num = param_types[col_num][1]
                 if dec_num > 0:
                     # has decimal
-                    buf_size = digit_num
-                    dec_num = dec_num
+                    # 1.23 as_tuple -> (1,2,3),-2 
+                    # 1.23 digit_num = 3 dec_num = 2
+                    # 0.11 digit_num = 2 dec_num = 2
+                    # 0.01 digit_num = 1 dec_num = 2
+                    if dec_num > digit_num:
+                        buf_size = dec_num
+                    else:
+                        buf_size = digit_num
+                        #dec_num = dec_num
                 else:
                     # no decimal
                     buf_size = digit_num - dec_num
@@ -1365,13 +1394,11 @@ class Cursor:
 
                 ParameterBuffer = create_buffer(buf_size + 4)# add extra length for sign and dot
 
-
             elif param_types[col_num][0] == 'f':
                 sql_c_type = SQL_C_CHAR
                 sql_type = SQL_DOUBLE
                 buf_size = SQL_data_type_dict[sql_type][4]
                 ParameterBuffer = create_buffer(buf_size)
-
 
             # datetime subclasses date, thus has to go first
             elif param_types[col_num][0] == 'dt':
@@ -1380,7 +1407,6 @@ class Cursor:
                 buf_size = self.connection.type_size_dic[SQL_TYPE_TIMESTAMP][0]
                 ParameterBuffer = create_buffer(buf_size)
                 dec_num = self.connection.type_size_dic[SQL_TYPE_TIMESTAMP][1]
-
 
             elif param_types[col_num][0] == 'd':
                 sql_c_type = SQL_C_CHAR
@@ -1397,7 +1423,6 @@ class Cursor:
                     sql_type = SQL_TYPE_TIMESTAMP
                     buf_size = 10
                     ParameterBuffer = create_buffer(buf_size)
-
 
             elif param_types[col_num][0] == 't':
                 sql_c_type = SQL_C_CHAR
@@ -1587,13 +1612,15 @@ class Cursor:
                     digit_num, dec_num = param_types[col_num][1]
                     if dec_num > 0:
                         # has decimal
+                        # 1.12 digit_num = 3 dec_num = 2
+                        # 0.11 digit_num = 2 dec_num = 2 
+                        # 0.01 digit_num = 1 dec_num = 2
                         left_part = digit_string[:digit_num - dec_num]
-                        right_part = digit_string[0-dec_num:]
+                        right_part = digit_string[0-dec_num:].zfill(dec_num)
+                        v = ''.join((sign, left_part,'.', right_part))
                     else:
                         # no decimal
-                        left_part = digit_string + '0'*(0-dec_num)
-                        right_part = ''
-                    v = ''.join((sign, left_part,'.', right_part))
+                        v = ''.join((digit_string, '0' * (0 - dec_num)))
 
                     if py_v3:
                         c_char_buf = bytes(v,'ascii')
@@ -1655,7 +1682,7 @@ class Cursor:
         self._free_stmt()
         self._last_param_types = None
         self.statement = None
-        if type(query_string) == unicode:
+        if isinstance(query_string, unicode):
             c_query_string = wchar_pointer(UCS_buf(query_string))
             ret = ODBC_API.SQLExecDirectW(self.stmt_h, c_query_string, len(query_string))
         else:
@@ -2060,8 +2087,7 @@ class Cursor:
             self.close()
 
         l_catalog = l_schema = l_table = l_tableType = 0
-
-        if unicode in [type(x) for x in (table, catalog, schema,tableType)]:
+        if any(isinstance(x, unicode) for x in (table, catalog, schema, tableType)):
             string_p = lambda x:wchar_pointer(UCS_buf(x))
             API_f = ODBC_API.SQLTablesW
         else:
@@ -2108,8 +2134,8 @@ class Cursor:
             self.close()
 
         l_catalog = l_schema = l_table = l_column = 0
-
-        if unicode in [type(x) for x in (table, catalog, schema,column)]:
+        
+        if any(isinstance(x, unicode) for x in (table, catalog, schema, column)):
             string_p = lambda x:wchar_pointer(UCS_buf(x))
             API_f = ODBC_API.SQLColumnsW
         else:
@@ -2153,8 +2179,7 @@ class Cursor:
             self.close()
 
         l_catalog = l_schema = l_table = 0
-
-        if unicode in [type(x) for x in (table, catalog, schema)]:
+        if any(isinstance(x, unicode) for x in (table, catalog, schema)):
             string_p = lambda x:wchar_pointer(UCS_buf(x))
             API_f = ODBC_API.SQLPrimaryKeysW
         else:
@@ -2196,8 +2221,7 @@ class Cursor:
             self.close()
 
         l_catalog = l_schema = l_table = l_foreignTable = l_foreignCatalog = l_foreignSchema = 0
-
-        if unicode in [type(x) for x in (table, catalog, schema,foreignTable,foreignCatalog,foreignSchema)]:
+        if any(isinstance(x, unicode) for x in (table, catalog, schema, foreignTable, foreignCatalog, foreignSchema)):
             string_p = lambda x:wchar_pointer(UCS_buf(x))
             API_f = ODBC_API.SQLForeignKeysW
         else:
@@ -2247,7 +2271,7 @@ class Cursor:
             self.close()
 
         l_catalog = l_schema = l_procedure = l_column = 0
-        if unicode in [type(x) for x in (procedure, catalog, schema,column)]:
+        if any(isinstance(x, unicode) for x in (procedure, catalog, schema, column)):
             string_p = lambda x:wchar_pointer(UCS_buf(x))
             API_f = ODBC_API.SQLProcedureColumnsW
         else:
@@ -2291,7 +2315,7 @@ class Cursor:
 
         l_catalog = l_schema = l_procedure = 0
 
-        if unicode in [type(x) for x in (procedure, catalog, schema)]:
+        if any(isinstance(x, unicode) for x in (procedure, catalog, schema)):
             string_p = lambda x:wchar_pointer(UCS_buf(x))
             API_f = ODBC_API.SQLProceduresW
         else:
@@ -2331,8 +2355,8 @@ class Cursor:
             self.close()
 
         l_table = l_catalog = l_schema = 0
-
-        if unicode in [type(x) for x in (table, catalog, schema)]:
+        
+        if any(isinstance(x, unicode) for x in (table, catalog, schema)):
             string_p = lambda x:wchar_pointer(UCS_buf(x))
             API_f = ODBC_API.SQLStatisticsW
         else:
@@ -2442,6 +2466,7 @@ class Cursor:
 # This class implement a odbc connection.
 #
 #
+connection_timeout = 0
 
 
 class Connection:
@@ -2454,6 +2479,7 @@ class Connection:
         self.dbc_h = ctypes.c_void_p()
         self.autocommit = autocommit
         self.readonly = False
+        # the query timeout value
         self.timeout = 0
         # self._cursors = []
         for key, value in list(kargs.items()):
@@ -2479,10 +2505,19 @@ class Connection:
         ret = ODBC_API.SQLAllocHandle(SQL_HANDLE_DBC, shared_env_h, ADDR(self.dbc_h))
         check_success(self, ret)
 
+        self.connection_timeout = connection_timeout
+        if self.connection_timeout != 0:
+            self.set_connection_timeout(connection_timeout)
+        
+        
         self.connect(connectString, autocommit, ansi, timeout, unicode_results, readonly)
-
-
-
+        
+    def set_connection_timeout(self,connection_timeout):
+        self.connection_timeout = connection_timeout
+        ret = ODBC_API.SQLSetConnectAttr(self.dbc_h, SQL_ATTR_CONNECTION_TIMEOUT, connection_timeout, SQL_IS_UINTEGER);
+        check_success(self, ret)
+            
+     
     def connect(self, connectString = '', autocommit = False, ansi = False, timeout = 0, unicode_results = use_unicode, readonly = False):
         """Connect to odbc, using connect strings and set the connection's attributes like autocommit and timeout
         by calling SQLSetConnectAttr
@@ -2491,7 +2526,7 @@ class Connection:
         # Before we establish the connection by the connection string
         # Set the connection's attribute of "timeout" (Actully LOGIN_TIMEOUT)
         if timeout != 0:
-            self.settimeout(timeout)
+
             ret = ODBC_API.SQLSetConnectAttr(self.dbc_h, SQL_ATTR_LOGIN_TIMEOUT, timeout, SQL_IS_UINTEGER);
             check_success(self, ret)
 
@@ -2544,7 +2579,10 @@ class Connection:
         # Set the connection's attribute of "readonly"
         #
         self.readonly = readonly
-
+        if self.readonly == True:
+            ret = ODBC_API.SQLSetConnectAttr(self.dbc_h, SQL_ATTR_ACCESS_MODE, SQL_MODE_READ_ONLY, SQL_IS_UINTEGER)
+            check_success(self, ret)
+        
         ret = ODBC_API.SQLSetConnectAttr(self.dbc_h, SQL_ATTR_ACCESS_MODE, self.readonly and SQL_MODE_READ_ONLY or SQL_MODE_READ_WRITE, SQL_IS_UINTEGER)
         check_success(self, ret)
 
@@ -2560,12 +2598,6 @@ class Connection:
 
     def add_output_converter(self, sqltype, func):
         self.output_converter[sqltype] = func
-
-    def settimeout(self, timeout):
-        ret = ODBC_API.SQLSetConnectAttr(self.dbc_h, SQL_ATTR_CONNECTION_TIMEOUT, timeout, SQL_IS_UINTEGER);
-        check_success(self, ret)
-        self.timeout = timeout
-
 
     def ConnectByDSN(self, dsn, user, passwd = ''):
         """Connect to odbc, we need dsn, user and optionally password"""
@@ -2593,8 +2625,12 @@ class Connection:
         return cur
 
     def update_db_special_info(self):
-        if 'OdbcFb' in self.getinfo(SQL_DRIVER_NAME):
-            return
+        try:
+            if 'OdbcFb' in self.getinfo(SQL_DRIVER_NAME):
+                return
+        except:
+            pass
+            
         for sql_type in (
                 SQL_TYPE_TIMESTAMP,
                 SQL_TYPE_DATE,
@@ -2728,6 +2764,7 @@ def connect(connectString = '', autocommit = False, ansi = False, timeout = 0, u
     return odbc(connectString, autocommit, ansi, timeout, unicode_results, readonly, kargs)
 '''
 
+
 def drivers():
     if sys.platform not in ('win32','cli'):
         raise Exception('This function is available for use in Windows only.')
@@ -2755,37 +2792,9 @@ def drivers():
         if Direction == SQL_FETCH_FIRST:
             Direction = SQL_FETCH_NEXT
     return DriverList
+        
 
-
-
-
-def win_create_mdb(mdb_path, sort_order = "General\0\0"):
-    if sys.platform not in ('win32','cli'):
-        raise Exception('This function is available for use in Windows only.')
-
-    mdb_driver = [d for d in drivers() if 'Microsoft Access Driver (*.mdb' in d]
-    if mdb_driver == []:
-        raise Exception('Access Driver is not found.')
-    else:
-        driver_name = mdb_driver[0].encode('mbcs')
-
-
-    #CREATE_DB=<path name> <sort order>
-    ctypes.windll.ODBCCP32.SQLConfigDataSource.argtypes = [ctypes.c_void_p,ctypes.c_ushort,ctypes.c_char_p,ctypes.c_char_p]
-
-    if py_v3:
-        c_Path =  bytes("CREATE_DB=" + mdb_path + " " + sort_order,'mbcs')
-    else:
-        c_Path =  "CREATE_DB=" + mdb_path + " " + sort_order
-    ODBC_ADD_SYS_DSN = 1
-
-
-    ret = ctypes.windll.ODBCCP32.SQLConfigDataSource(None,ODBC_ADD_SYS_DSN,driver_name, c_Path)
-    if not ret:
-        raise Exception('Failed to create Access mdb file - "%s". Please check file path, permission and Access driver readiness.' %mdb_path)
-
-
-def win_connect_mdb(mdb_path):
+def get_mdb_driver():
     if sys.platform not in ('win32','cli'):
         raise Exception('This function is available for use in Windows only.')
 
@@ -2794,24 +2803,38 @@ def win_connect_mdb(mdb_path):
         raise Exception('Access Driver is not found.')
     else:
         driver_name = mdb_driver[0]
+    return driver_name
 
-    return connect('Driver={'+driver_name+"};DBQ="+mdb_path, unicode_results = use_unicode, readonly = False)
-
-
-
-def win_compact_mdb(mdb_path, compacted_mdb_path=None, sort_order = "General\0", password=None):
-    if sys.platform not in ('win32','cli'):
-        raise Exception('This function is available for use in Windows only.')
-
-
-    mdb_driver = [d for d in drivers() if 'Microsoft Access Driver (*.mdb' in d]
-    if mdb_driver == []:
-        raise Exception('Access Driver is not found.')
+    
+def win_connect_mdb(mdb_path,readonly=False):
+    driver_name = get_mdb_driver()
+    mdb_path = mdb_path.strip('"')
+    return connect('Driver={'+driver_name+"};DBQ="+mdb_path, unicode_results = use_unicode, readonly = readonly)
+    
+    
+def win_create_mdb(mdb_path, sort_order = "General\0\0"):
+    driver_name = get_mdb_driver()
+    mdb_path='"'+mdb_path.strip('"')+'"'
+    #CREATE_DB=<path name> <sort order>
+    if py_v3:
+        c_Path =  bytes("CREATE_DB=" + mdb_path + " " + sort_order,'mbcs')
     else:
-        driver_name = mdb_driver[0].encode('mbcs')
-
-    #COMPACT_DB=<source path> <destination path> <sort order>
+        c_Path =  "CREATE_DB=" + mdb_path + " " + sort_order
+    ODBC_ADD_SYS_DSN = 1
+    
     ctypes.windll.ODBCCP32.SQLConfigDataSource.argtypes = [ctypes.c_void_p,ctypes.c_ushort,ctypes.c_char_p,ctypes.c_char_p]
+    ret = ctypes.windll.ODBCCP32.SQLConfigDataSource(None,ODBC_ADD_SYS_DSN,driver_name.encode('mbcs'), c_Path)
+    if not ret:
+        raise Exception('Failed to create Access mdb file - "%s". Please check file path, permission and Access driver readiness.' %mdb_path)
+    return win_connect_mdb(mdb_path)
+ 
+    
+def win_compact_mdb(mdb_path, compacted_mdb_path="", sort_order = "General\0", password=None):
+    driver_name = get_mdb_driver()
+    mdb_path='"'+mdb_path.strip('"')+'"'
+    compacted_mdb_path='"'+compacted_mdb_path.strip('"')+'"'
+    
+    #COMPACT_DB=<source path> <destination path> <sort order>
     #driver_name = "Microsoft Access Driver (*.mdb)"
 
     if not compacted_mdb_path:
@@ -2822,13 +2845,14 @@ def win_compact_mdb(mdb_path, compacted_mdb_path=None, sort_order = "General\0",
         pass_config = "PWD=" + password
 
     if py_v3:
-        c_Path = bytes("COMPACT_DB=\"" + mdb_path + "\" \"" + compacted_mdb_path + "\" " + sort_order + pass_config,'mbcs')
+        c_Path = bytes("COMPACT_DB=" + mdb_path + " " + compacted_mdb_path + " " + sort_order + pass_config,'mbcs')
         #driver_name = bytes(driver_name,'mbcs')
     else:
-        c_Path = "COMPACT_DB=\"" + mdb_path + "\" \"" + compacted_mdb_path + "\" " + sort_order + pass_config
+        c_Path = "COMPACT_DB=" + mdb_path + " " + compacted_mdb_path + " " + sort_order + pass_config
 
     ODBC_ADD_SYS_DSN = 1
-    ret = ctypes.windll.ODBCCP32.SQLConfigDataSource(None,ODBC_ADD_SYS_DSN,driver_name, c_Path)
+    ctypes.windll.ODBCCP32.SQLConfigDataSource.argtypes = [ctypes.c_void_p,ctypes.c_ushort,ctypes.c_char_p,ctypes.c_char_p]
+    ret = ctypes.windll.ODBCCP32.SQLConfigDataSource(None,ODBC_ADD_SYS_DSN,driver_name.encode('mbcs'), c_Path)
     if not ret:
         raise Exception('Failed to compact Access mdb file - "%s". Please check file path, permission and Access driver readiness.' %compacted_mdb_path)
 
@@ -2861,12 +2885,14 @@ def dataSources():
 def monkey_patch_for_gevent():
     import functools, gevent
     apply_e = gevent.get_hub().threadpool.apply_e
+
     def monkey_patch(func):
         @functools.wraps(func)
         def wrap(*args, **kwargs):
             #if DEBUG:print('%s called with %s %s' % (func, args, kwargs))
             return apply_e(Exception, func, args, kwargs)
         return wrap
+    
     for attr in dir(ODBC_API):
         if attr.startswith('SQL') and hasattr(getattr(ODBC_API, attr), 'argtypes'):
             setattr(ODBC_API, attr, monkey_patch(getattr(ODBC_API, attr)))

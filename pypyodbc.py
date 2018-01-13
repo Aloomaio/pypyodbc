@@ -1826,7 +1826,7 @@ class Cursor:
                                               ADDR(Ctype_code),ADDR(Csize),ADDR(CDecimalDigits), ADDR(Cnull_ok))
                 if ret != SQL_SUCCESS:
                     check_success(self, ret)
-            
+
             col_name = from_buffer_u(Cname)
             if lowercase:
                 col_name = col_name.lower()

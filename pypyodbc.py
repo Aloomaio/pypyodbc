@@ -510,8 +510,8 @@ def UTF16_dec(buffer):
         ret = to_decode.decode(odbc_decoding)
     except UnicodeDecodeError:
         # We print as there is no logging here
-        print 'pypyodbc failed to decode "%s". Emitting in ' \
-              'raw form' % to_decode
+        print('pypyodbc failed to decode "%s". Emitting in ' \
+              'raw form' % to_decode)
         ret = to_decode
 
     return ret

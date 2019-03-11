@@ -502,7 +502,7 @@ def UTF16_dec(buffer):
             to_decode = raw[:last_match + 1]
 
     elif "\0" == raw[l - 1] and "\0" == raw[l - 2]:
-        to_decode = raw[:l - 2]
+        to_decode = raw[:l - 1]
 
     else:
         to_decode = raw

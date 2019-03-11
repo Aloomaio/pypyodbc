@@ -490,21 +490,21 @@ def UCS_dec(buffer):
     return ''.join(uchars)
 
 
-NULLS_REGEX = re.compile('\x00\x00')
-
-
 def UTF16_dec(buffer):
-    null_pos = NULLS_REGEX.search(buffer.raw)
-    if null_pos:
-        up_to = null_pos.start() or -1
-        if up_to % 2:
-            to_decode = buffer.raw[:up_to + 1]
+    last_match = raw.find("\x00\x00\x00")
+    l = len(raw)
+    if last_match != -1:
+        if last_match % 2 == 0:
+            to_decode = raw[:last_match]
 
         else:
-            to_decode = buffer.raw[:up_to]
+            to_decode = raw[:last_match + 1]
+
+    elif "\0" == raw[l - 1] and "\0" == raw[l - 2]:
+        to_decode = raw[:l - 2]
 
     else:
-        to_decode = buffer.raw
+        to_decode = raw
 
     try:
         ret = to_decode.decode(odbc_decoding)

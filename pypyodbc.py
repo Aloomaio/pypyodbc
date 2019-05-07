@@ -492,6 +492,7 @@ def UCS_dec(buffer):
 
 def UTF16_dec(buffer):
     raw = buffer.raw
+    print("Raw Buffer: %s" % raw)
     if raw.startswith("\x00\x00"):
         return ""
     last_match = raw.find("\x00\x00\x00")

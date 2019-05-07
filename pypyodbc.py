@@ -493,6 +493,8 @@ def UCS_dec(buffer):
 def UTF16_dec(buffer):
     raw = buffer.raw
     print("Raw Buffer: %s" % raw)
+    debug_flag = 'MarshallPlan' in raw
+
     if raw.startswith("\x00\x00"):
         return ""
     last_match = raw.find("\x00\x00\x00")
@@ -500,15 +502,23 @@ def UTF16_dec(buffer):
     if last_match != -1:
         if last_match % 2 == 0:
             to_decode = raw[:last_match]
+	    if debug_flag:
+		print("KOOOOOKKOOO")
 
         else:
+	    if debug_flag:
+		print("Boo")
             to_decode = raw[:last_match + 1]
 
     elif "\x00" == raw[l - 1] and "\x00" == raw[l - 2]:
-        to_decode = raw[:l - 2]
+        if debug_flag:
+		print("YOYOYO")
+	to_decode = raw[:l - 2]
 
     else:
-        to_decode = raw
+        if debug_flag:
+		print("SHANI IS RIGHT")
+	to_decode = raw
 
     try:
         ret = to_decode.decode(odbc_decoding)

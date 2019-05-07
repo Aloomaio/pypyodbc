@@ -503,21 +503,21 @@ def UTF16_dec(buffer):
         if last_match % 2 == 0:
             to_decode = raw[:last_match]
 	    if debug_flag:
-		print("KOOOOOKKOOO")
+		    print("KOOOOOKKOOO")
 
         else:
-	    if debug_flag:
-		print("Boo")
+	        if debug_flag:
+		        print("Boo")
             to_decode = raw[:last_match + 1]
 
     elif "\x00" == raw[l - 1] and "\x00" == raw[l - 2]:
         if debug_flag:
-		print("YOYOYO")
-	to_decode = raw[:l - 2]
+		    print("YOYOYO")
+	    to_decode = raw[:l - 2]
 
     else:
         if debug_flag:
-		print("SHANI IS RIGHT")
+		    print("SHANI IS RIGHT")
 	to_decode = raw
 
     try:

@@ -493,7 +493,7 @@ def UCS_dec(buffer):
 def UTF16_dec(buffer):
     raw = buffer.raw
     print("Raw Buffer: %s" % raw)
-    debug_flag = 'MarshallPlan' in raw
+    debug_flag = 'driver debt settled' in raw
     print("Debug flag is %s" % debug_flag)
 
     if raw.startswith("\x00\x00"):

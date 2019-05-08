@@ -518,7 +518,7 @@ def UTF16_dec(buffer):
     else:
         if debug_flag:
             print("SHANI IS RIGHT")
-    to_decode = raw
+        to_decode = raw
 
     try:
         ret = to_decode.decode(odbc_decoding)

@@ -492,35 +492,19 @@ def UCS_dec(buffer):
 
 def UTF16_dec(buffer):
     raw = buffer.raw
-    print("Raw Buffer: %s" % raw)
 
     if raw.startswith("\x00\x00"):
         return ""
     
-    #last_match = raw.find("\x00\x00\x00")
-    #while last_match != -1 and last_match % 2 != 0:
-    #    last_match = raw.find("\x00\x00", last_match + 2)
+    # Seek for two consecutive null-bytes starting in an even position 
     last_match = raw.find("\x00\x00")
     while last_match != -1 and last_match % 2 != 0:
         last_match = raw.find("\x00\x00", last_match + 1)
 
-    l = len(raw)
     if last_match != -1:
         to_decode = raw[:last_match]
-
-        #if last_match % 2 == 0:
-#
-        #else:
-        #    to_decode = raw[:last_match + 1]
-
-    #elif "\x00" == raw[l - 1] and "\x00" == raw[l - 2]:
-    #    to_decode = raw[:l - 2]
-
     else:
         to_decode = raw
-
-    if 'MarshallPlan' in to_decode.decode(odbc_decoding):
-        import ipdb; ipdb.set_trace()
 
     try:
         ret = to_decode.decode(odbc_decoding)

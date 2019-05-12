@@ -492,7 +492,7 @@ def UCS_dec(buffer):
 
 def UTF16_dec(buffer):
     raw = buffer.raw
-    print("Raw Buffer: %s" % raw)
+    print("Raw Buffer: %b" % raw)
 
     if raw.startswith("\x00\x00"):
         return ""
@@ -519,6 +519,9 @@ def UTF16_dec(buffer):
     else:
         to_decode = raw
 
+    if 'MarshallPlan' in to_decode:
+        import ipdb; ipdb.set_trace()
+        
     try:
         ret = to_decode.decode(odbc_decoding)
     except UnicodeDecodeError:

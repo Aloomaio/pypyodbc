@@ -519,7 +519,7 @@ def UTF16_dec(buffer):
     else:
         to_decode = raw
 
-    if 'MarshallPlan' in to_decode:
+    if 'MarshallPlan' in to_decode.decode(odbc_decoding):
         import ipdb; ipdb.set_trace()
         
     try:

@@ -499,7 +499,7 @@ def UTF16_dec(buffer):
         return ""
 
     last_match = raw.find("\x00\x00")
-    while last_match != -1 && last_match % 2 != 0:
+    while last_match != -1 and last_match % 2 != 0:
         last_match = raw.find("\x00\x00", last_match + 2)
 
     l = len(raw)

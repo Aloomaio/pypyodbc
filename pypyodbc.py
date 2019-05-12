@@ -513,8 +513,8 @@ def UTF16_dec(buffer):
         #else:
         #    to_decode = raw[:last_match + 1]
 
-    elif "\x00" == raw[l - 1] and "\x00" == raw[l - 2]:
-        to_decode = raw[:l - 2]
+    #elif "\x00" == raw[l - 1] and "\x00" == raw[l - 2]:
+    #    to_decode = raw[:l - 2]
 
     else:
         to_decode = raw

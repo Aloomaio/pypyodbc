@@ -2641,11 +2641,14 @@ class Connection:
         self.update_db_special_info()
         self.connected = 1
 
-    def cursor(self, row_type_callable=None, lowercase=True):
+    def cursor(self, row_type_callable=None, lowercase=True,
+               decode_raw_parts_separately=True):
         #self.settimeout(self.timeout)
         if not self.connected:
             raise ProgrammingError('HY000','Attempt to use a closed connection.')
-        cur = Cursor(self, row_type_callable=row_type_callable, lowercase=lowercase)
+        cur = Cursor(self, row_type_callable=row_type_callable,
+                     lowercase=lowercase,
+                     decode_raw_parts_separately=decode_raw_parts_separately)
         # self._cursors.append(cur)
         return cur
 

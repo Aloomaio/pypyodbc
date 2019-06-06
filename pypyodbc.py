@@ -490,31 +490,39 @@ def UCS_dec(buffer):
     return ''.join(uchars)
 
 
-def UTF16_dec(buffer):
+def get_bytes_from_buffer(buffer):
     raw = buffer.raw
 
     if raw.startswith("\x00\x00"):
         return ""
-    
-    # Seek for two consecutive null-bytes starting in an even position 
+
+    # Seek for two consecutive null-bytes starting in an even position
     last_match = raw.find("\x00\x00")
     while last_match != -1 and last_match % 2 != 0:
         last_match = raw.find("\x00\x00", last_match + 1)
 
     if last_match != -1:
-        to_decode = raw[:last_match]
+        data_bytes = raw[:last_match]
     else:
-        to_decode = raw
+        data_bytes = raw
 
+    return data_bytes
+
+
+def decode_bytes(data_bytes):
     try:
-        ret = to_decode.decode(odbc_decoding)
+        return data_bytes.decode(odbc_decoding)
     except UnicodeDecodeError:
         # We print as there is no logging here
-        print('pypyodbc failed to decode "%s". Emitting in ' \
-              'raw form' % to_decode)
-        ret = to_decode
+        print('pypyodbc failed to decode "%s". Emitting in '
+              'raw form, removing NULL bytes' % data_bytes)
+        return data_bytes.replace('\x00', '')
 
-    return ret
+
+def UTF16_dec(buffer):
+    data_bytes = get_bytes_from_buffer(buffer)
+    return decode_bytes(data_bytes)
+
 
 from_buffer_u = lambda buffer: buffer.value
 
@@ -1081,7 +1089,7 @@ def TupleRow(cursor):
                 self.cursor_description[i][0]: item
                 for i, item in enumerate(self)
             }
-            
+
         def __getitem__(self, field):
             if isinstance(field, (unicode,str)):
                 return self.get(field)
@@ -1200,7 +1208,8 @@ def get_type(v):
 
 # The Cursor Class.
 class Cursor:
-    def __init__(self, conx, row_type_callable=None, lowercase=True):
+    def __init__(self, conx, row_type_callable=None, lowercase=True,
+                 decode_raw_parts_separately=True):
         """ Initialize self.stmt_h, which is the handle of a statement
         A statement is actually the basis of a python"cursor" object
         """
@@ -1223,7 +1232,7 @@ class Cursor:
         self.arraysize = 1
         ret = ODBC_API.SQLAllocHandle(SQL_HANDLE_STMT, self.connection.dbc_h, ADDR(self.stmt_h))
         check_success(self, ret)
-  
+
         self.timeout = conx.timeout
         if self.timeout != 0:
             self.set_timeout(self.timeout)
@@ -1231,11 +1240,17 @@ class Cursor:
         self.closed = False
         self.lowercase = lowercase
 
+        if py_v3 and not decode_raw_parts_separately:
+            print("`decode_raw_parts_separately` is not supported in python3")
+            self.decode_raw_parts_separately = True
+        else:
+            self.decode_raw_parts_separately = decode_raw_parts_separately
+
     def set_timeout(self, timeout):
         self.timeout = timeout
         ret = ODBC_API.SQLSetStmtAttr(self.stmt_h, SQL_ATTR_QUERY_TIMEOUT, self.timeout, 0)
         check_success(self, ret)
-        
+
     def prepare(self, query_string):
         """prepare a query"""
 
@@ -1329,8 +1344,8 @@ class Cursor:
                 sql_type = SQL_WVARCHAR
                 # allocate two bytes for each char due to utf-16-le encoding
                 buf_size = 255 * 2
-                ParameterBuffer = create_buffer_u(buf_size)                
-                    
+                ParameterBuffer = create_buffer_u(buf_size)
+
             elif param_types[col_num][0] == 's':
                 sql_c_type = SQL_C_CHAR
                 sql_type = SQL_VARCHAR
@@ -1616,7 +1631,7 @@ class Cursor:
                     if dec_num > 0:
                         # has decimal
                         # 1.12 digit_num = 3 dec_num = 2
-                        # 0.11 digit_num = 2 dec_num = 2 
+                        # 0.11 digit_num = 2 dec_num = 2
                         # 0.01 digit_num = 1 dec_num = 2
                         left_part = digit_string[:digit_num - dec_num]
                         right_part = digit_string[0-dec_num:].zfill(dec_num)
@@ -1950,7 +1965,11 @@ class Cursor:
                                 if target_type == SQL_C_BINARY:
                                     raw_data_parts.append(alloc_buffer.raw[:used_buf_len.value])
                                 elif target_type == SQL_C_WCHAR:
-                                    raw_data_parts.append(from_buffer_u(alloc_buffer))
+                                    if self.decode_raw_parts_separately:
+                                        raw_data_parts.append(from_buffer_u(alloc_buffer))
+                                    else:
+                                        raw_data_parts.append(get_bytes_from_buffer(
+                                            alloc_buffer))
                                 else:
                                     # line below fails when chr(0) in result, hence replaced with the active line below
                                     #raw_data_parts.append(alloc_buffer.value)
@@ -1962,7 +1981,12 @@ class Cursor:
                         if target_type == SQL_C_BINARY:
                             raw_data_parts.append(alloc_buffer.raw)
                         elif target_type == SQL_C_WCHAR:
-                            raw_data_parts.append(from_buffer_u(alloc_buffer))
+                            if self.decode_raw_parts_separately:
+                                raw_data_parts.append(from_buffer_u(
+                                    alloc_buffer))
+                            else:
+                                raw_data_parts.append(get_bytes_from_buffer(
+                                    alloc_buffer))
                         else:
                             raw_data_parts.append(alloc_buffer.value)
 
@@ -1978,8 +2002,12 @@ class Cursor:
                             raw_value = merge_raw_data_parts('', raw_data_parts)
                         else:
                             raw_value = merge_raw_data_parts(BLANK_BYTE, raw_data_parts)
+
                     else:
                         raw_value = merge_raw_data_parts('', raw_data_parts)
+                        # raw_value is not decoded yet
+                        if not self.decode_raw_parts_separately:
+                            raw_value = decode_bytes(raw_value)
 
                     value_list.append(buf_cvt_func(raw_value))
                 col_num += 1
@@ -2507,15 +2535,15 @@ class Connection:
         self.connection_timeout = connection_timeout
         if self.connection_timeout != 0:
             self.set_connection_timeout(connection_timeout)
-        
-        
+
+
         self.connect(connectString, autocommit, ansi, timeout, unicode_results, readonly)
-        
+
     def set_connection_timeout(self,connection_timeout):
         self.connection_timeout = connection_timeout
         ret = ODBC_API.SQLSetConnectAttr(self.dbc_h, SQL_ATTR_CONNECTION_TIMEOUT, connection_timeout, SQL_IS_UINTEGER);
         check_success(self, ret)
-            
+
     def connect(self, connectString = '', autocommit = False, ansi = False, timeout = 0, unicode_results = use_unicode, readonly = False):
         """Connect to odbc, using connect strings and set the connection's attributes like autocommit and timeout
         by calling SQLSetConnectAttr
@@ -2580,7 +2608,7 @@ class Connection:
         if self.readonly is True:
             ret = ODBC_API.SQLSetConnectAttr(self.dbc_h, SQL_ATTR_ACCESS_MODE, SQL_MODE_READ_ONLY, SQL_IS_UINTEGER)
             check_success(self, ret)
-        
+
         ret = ODBC_API.SQLSetConnectAttr(self.dbc_h, SQL_ATTR_ACCESS_MODE, self.readonly and SQL_MODE_READ_ONLY or SQL_MODE_READ_WRITE, SQL_IS_UINTEGER)
         check_success(self, ret)
 
@@ -2613,11 +2641,11 @@ class Connection:
         self.update_db_special_info()
         self.connected = 1
 
-    def cursor(self, row_type_callable=None, lowercase=True): 
+    def cursor(self, row_type_callable=None, lowercase=True):
         #self.settimeout(self.timeout)
         if not self.connected:
             raise ProgrammingError('HY000','Attempt to use a closed connection.')
-        cur = Cursor(self, row_type_callable=row_type_callable, lowercase=lowercase) 
+        cur = Cursor(self, row_type_callable=row_type_callable, lowercase=lowercase)
         # self._cursors.append(cur)
         return cur
 
@@ -2627,7 +2655,7 @@ class Connection:
                 return
         except:
             pass
-            
+
         for sql_type in (
                 SQL_TYPE_TIMESTAMP,
                 SQL_TYPE_DATE,
@@ -2801,13 +2829,13 @@ def get_mdb_driver():
         driver_name = mdb_driver[0]
     return driver_name
 
-    
+
 def win_connect_mdb(mdb_path,readonly=False):
     driver_name = get_mdb_driver()
     mdb_path = mdb_path.strip('"')
     return connect('Driver={'+driver_name+"};DBQ="+mdb_path, unicode_results = use_unicode, readonly = readonly)
-    
-    
+
+
 def win_create_mdb(mdb_path, sort_order = "General\0\0"):
     driver_name = get_mdb_driver()
     mdb_path='"'+mdb_path.strip('"')+'"'
@@ -2823,12 +2851,12 @@ def win_create_mdb(mdb_path, sort_order = "General\0\0"):
     if not ret:
         raise Exception('Failed to create Access mdb file - "%s". Please check file path, permission and Access driver readiness.' %mdb_path)
     return win_connect_mdb(mdb_path)
-    
+
 def win_compact_mdb(mdb_path, compacted_mdb_path="", sort_order = "General\0", password=None):
     driver_name = get_mdb_driver()
     mdb_path='"'+mdb_path.strip('"')+'"'
     compacted_mdb_path='"'+compacted_mdb_path.strip('"')+'"'
-    
+
     #COMPACT_DB=<source path> <destination path> <sort order>
     #driver_name = "Microsoft Access Driver (*.mdb)"
 

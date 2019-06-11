@@ -27,7 +27,7 @@ apilevel = '2.0'
 paramstyle = 'qmark'
 threadsafety = 1
 lowercase=True
-version = '1.3.6'
+version = '1.3.7'
 
 DEBUG = 0
 # Comment out all "if DEBUG:" statements like below for production

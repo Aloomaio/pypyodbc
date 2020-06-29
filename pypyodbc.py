@@ -623,7 +623,12 @@ def tm_cvt(x):
     if py_v3:
         x = x.decode('ascii')
     if x == '': return None
-    else: return datetime.time(int(x[0:2]),int(x[3:5]),int(x[6:8]),int(x[9:].ljust(6,'0')))
+    else: 
+        try:
+            return datetime.time(int(x[0:2]),int(x[3:5]),int(x[6:8]),int(x[9:].ljust(6,'0')))
+        except:
+            print("Failed to parse value=%s to datetime.time object, return nil")
+            return None
 
 def dt_cvt(x):
     if py_v3:
